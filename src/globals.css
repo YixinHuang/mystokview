@@ -1,0 +1,39 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--td-bg-color-page);
+}
+
+/* 涨红跌绿 */
+.up {
+  color: #e34d59;
+}
+.down {
+  color: #00a870;
+}
+.flat {
+  color: var(--td-text-color-secondary);
+}
+
+.chat-bubble-user {
+  background: var(--td-brand-color-light);
+  border-radius: 8px;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-bubble-assistant {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
