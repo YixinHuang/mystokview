@@ -97,6 +97,7 @@ async function buildHoldingsPayload() {
       authRequired: market.authRequired,
       authUrl: market.authUrl,
       error: market.error,
+      klineFallback: market.klineFallback ?? false,
     },
   };
 }
@@ -175,6 +176,7 @@ app.get("/api/quotes", async (req, res) => {
     authRequired: market.authRequired,
     authUrl: market.authUrl,
     error: market.error,
+    klineFallback: market.klineFallback ?? false,
   });
 });
 
