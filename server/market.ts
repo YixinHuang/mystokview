@@ -21,6 +21,13 @@ export interface MarketResult {
   klineFallback?: boolean;
 }
 
+/** fetchKline 的返回：行情 + 授权状态 */
+export interface KlineResult {
+  quotes: Map<string, Quote>;
+  authRequired: boolean;
+  authUrl: string | null;
+}
+
 const AUTH_RE = /AUTH_REQUIRED:(\S+)/;
 const round = (n: number, digits = 4) => {
   const p = 10 ** digits;
@@ -59,20 +66,6 @@ function parseMarkdownTable(output: string): Record<string, string>[] {
   return rows;
 }
 
-function toQuote(row: Record<string, string>): Quote | null {
-  const code = row.code;
-  const price = parseFloat(row.price);
-  if (!code || Number.isNaN(price)) return null;
-  return {
-    code,
-    name: row.name || code,
-    price,
-    prevClose: parseFloat(row.prev_close) || price,
-    changePercent: parseFloat(row.change_percent) || 0,
-    time: row.time || "",
-  };
-}
-
 /** 检测 westock 命令是否可用（是否已安装） */
 export function isWestockInstalled(): boolean {
   try {
@@ -83,14 +76,34 @@ export function isWestockInstalled(): boolean {
   }
 }
 
-/** 查询 westock 授权状态 */
-export async function checkAuth(): Promise<{ authed: boolean; version: string }> {  try {
+/** 查询 westock 授权状态（兼容不同版本：有的支持 version --json，有的只返回纯文本版本号） */
+export async function checkAuth(): Promise<{ authed: boolean; version: string }> {
+  // 先尝试取版本号（部分旧版本不支持 --json）
+  let version = "";
+  try {
+    const v = await runWestock(["version"], 10000);
+    version = v.match(/westock\s+([\d.]+)/)?.[1] ?? v.trim();
+  } catch {
+    /* ignore */
+  }
+  try {
     const out = await runWestock(["version", "--json"], 10000);
     const j = JSON.parse(out.trim());
-    return { authed: Boolean(j.auth), version: String(j.version ?? "") };
+    if (j && typeof j.auth !== "undefined") {
+      return { authed: Boolean(j.auth), version: String(j.version ?? version) };
+    }
   } catch {
-    return { authed: false, version: "" };
+    /* 不支持 --json，继续用探针判断 */
   }
+  // 兼容兜底：用一次最小行情查询探针判断授权
+  try {
+    const probe = await runWestock(["kline", "sh600519", "--period", "day", "--limit", "1"], 15000);
+    if (AUTH_RE.test(probe)) return { authed: false, version };
+    if (probe.includes("|")) return { authed: true, version };
+  } catch {
+    /* ignore */
+  }
+  return { authed: false, version };
 }
 
 /** 把 kline 的一行记录转成 Quote：以 last 作为最新价，change_pct 反推昨收 */
@@ -127,7 +140,6 @@ async function fetchKlineOne(code: string, period = "day", limit = 1): Promise<Q
 /**
  * 通过 westock 的 kline 子命令查询行情（westock kline sh600519 --period day --limit 1），
  * 取返回的最新一条记录中的 last 作为最新价，change_pct 反推昨收。
- * 用于 `quote` 子命令拿不到价格时的兜底。
  *
  * westock 支持逗号分隔的多代码批量查询（此时返回带 code 列）；
  * 批量结果不完整时，再对缺失代码逐个查询补全。
@@ -135,10 +147,10 @@ async function fetchKlineOne(code: string, period = "day", limit = 1): Promise<Q
 export async function fetchKline(
   codes: string[],
   opts: { period?: string; limit?: number } = {}
-): Promise<Map<string, Quote>> {
+): Promise<KlineResult> {
   const result = new Map<string, Quote>();
   const unique = [...new Set(codes)].filter(Boolean);
-  if (unique.length === 0) return result;
+  if (unique.length === 0) return { quotes: result, authRequired: false, authUrl: null };
   const period = opts.period ?? "day";
   const limit = opts.limit ?? 1;
 
@@ -148,14 +160,14 @@ export async function fetchKline(
       ["kline", unique.join(","), "--period", period, "--limit", String(limit)],
       20000
     );
-    if (!AUTH_RE.test(out)) {
-      for (const row of parseMarkdownTable(out)) {
-        const code = (row.code || "").trim() || (unique.length === 1 ? unique[0] : "");
-        if (!code) continue;
-        const q = toQuoteFromKline(code, row);
-        // 同一 code 后出现的行更新，即保留最新一根
-        if (q) result.set(code, q);
-      }
+    const authMatch = out.match(AUTH_RE);
+    if (authMatch) return { quotes: result, authRequired: true, authUrl: authMatch[1] };
+    for (const row of parseMarkdownTable(out)) {
+      const code = (row.code || "").trim() || (unique.length === 1 ? unique[0] : "");
+      if (!code) continue;
+      const q = toQuoteFromKline(code, row);
+      // 同一 code 后出现的行更新，即保留最新一根
+      if (q) result.set(code, q);
     }
   } catch {
     /* 批量失败则走逐个兜底 */
@@ -172,97 +184,39 @@ export async function fetchKline(
       if (q) result.set(c, q);
     });
   }
-  return result;
+  return { quotes: result, authRequired: false, authUrl: null };
 }
 
-/** 对 quote 未取到的代码用 kline 兜底补齐，并把补到的行情写入缓存；返回补到的数量 */
-async function fillMissingByKline(codes: string[], quotes: Map<string, Quote>): Promise<number> {
-  const missing = codes.filter((c) => !quotes.has(c));
-  if (missing.length === 0) return 0;
-  const kline = await fetchKline(missing);
-  if (kline.size === 0) return 0;
-  // kline 返回不含名称，保留缓存中已有的名称，避免覆盖成 code
-  const cached = quoteCacheRepo.get([...kline.keys()]);
-  for (const [code, q] of kline) {
-    const old = cached.get(code);
-    if (old?.name && old.name !== code) q.name = old.name;
-    quotes.set(code, q);
-  }
-  quoteCacheRepo.upsertMany([...kline.values()]);
-  console.warn(
-    `[market] quote 未取到行情，已用 kline 兜底补齐 ${kline.size}/${missing.length} 只：${[...kline.keys()].join(", ")}`
-  );
-  return kline.size;
-}
-
-/** 批量查询行情；未授权/失败时回退到 SQLite 缓存价，仍缺失则用 kline 兜底 */
+/** 批量查询行情；主查询走 kline，未授权/失败时回退本地缓存价 */
 export async function fetchQuotes(codes: string[]): Promise<MarketResult> {
   const unique = [...new Set(codes)].filter(Boolean);
   if (unique.length === 0) {
     return { quotes: new Map(), stale: false, authRequired: false, authUrl: null, error: null };
   }
-  try {
-    const out = await runWestock(["quote", unique.join(",")]);
-    const authMatch = out.match(AUTH_RE);
-    if (authMatch) {
-      const quotes = quoteCacheRepo.get(unique);
-      const cacheCount = quotes.size;
-      const filled = await fillMissingByKline(unique, quotes);
-      return {
-        quotes,
-        stale: cacheCount > 0,
-        authRequired: true,
-        authUrl: authMatch[1],
-        error: quotes.size > 0 ? null : "行情未授权且无缓存",
-        klineFallback: filled > 0,
-      };
-    }
-    const rows = parseMarkdownTable(out);
-    const quotes = new Map<string, Quote>();
-    for (const r of rows) {
-      const q = toQuote(r);
-      if (q) quotes.set(q.code, q);
-    }
-    if (quotes.size === 0) {
-      // quote 返回为空：先回退缓存，仍缺失再用 kline 兜底
-      const cached = quoteCacheRepo.get(unique);
-      const cacheCount = cached.size;
-      const filled = await fillMissingByKline(unique, cached);
-      return {
-        quotes: cached,
-        stale: cacheCount > 0,
-        authRequired: false,
-        authUrl: null,
-        error: cached.size > 0 ? null : "行情查询返回为空",
-        klineFallback: filled > 0,
-      };
-    }
-    quoteCacheRepo.upsertMany([...quotes.values()]);
-    // 部分代码未取到时用 kline 补齐
-    const filled = await fillMissingByKline(unique, quotes);
+  const { quotes, authRequired, authUrl } = await fetchKline(unique);
+  if (authRequired) {
+    const cached = quoteCacheRepo.get(unique);
     return {
-      quotes,
-      stale: false,
-      authRequired: false,
-      authUrl: null,
+      quotes: cached,
+      stale: cached.size > 0,
+      authRequired: true,
+      authUrl,
       error: null,
-      klineFallback: filled > 0,
-    };
-  } catch (e: any) {
-    const msg = String(e?.message ?? e);
-    const authMatch = msg.match(AUTH_RE);
-    const quotes = quoteCacheRepo.get(unique);
-    const cacheCount = quotes.size;
-    const filled = await fillMissingByKline(unique, quotes);
-    return {
-      quotes,
-      stale: cacheCount > 0,
-      authRequired: Boolean(authMatch),
-      authUrl: authMatch?.[1] ?? null,
-      error: quotes.size > 0 ? null : msg,
-      klineFallback: filled > 0,
     };
   }
+  if (quotes.size === 0) {
+    // kline 无结果：回退本地缓存
+    const cached = quoteCacheRepo.get(unique);
+    return {
+      quotes: cached,
+      stale: cached.size > 0,
+      authRequired: false,
+      authUrl: null,
+      error: cached.size > 0 ? null : "行情查询返回为空",
+    };
+  }
+  quoteCacheRepo.upsertMany([...quotes.values()]);
+  return { quotes, stale: false, authRequired: false, authUrl: null, error: null };
 }
 
 function marketOf(code: string): string {

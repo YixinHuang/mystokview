@@ -42,8 +42,18 @@ if command -v westock >/dev/null 2>&1; then
   if echo "$OUT" | grep -qi '"auth"[: ]*true'; then
     ok "westock 已授权，行情可实时获取"
   else
-    warn "westock 已安装但未授权，行情将回退为本地缓存。"
-    info "授权方式：运行 'westock version' 或在本应用查询行情时，按返回的授权链接在浏览器扫码登录。"
+    # 部分 westock 版本不支持 --json（仅返回纯文本版本号，如 "westock 0.0.2 channel=..."），
+    # 且有些版本没有 quote 子命令，上面的 JSON 判断永不命中。改用真实行情查询做探针：
+    # 输出含 AUTH_REQUIRED 表示未授权；能返回行情表格（含竖线分隔）表示已授权可用。
+    PROBE=$(westock kline sh600519 --period day --limit 1 2>/dev/null)
+    if echo "$PROBE" | grep -qi 'AUTH_REQUIRED'; then
+      warn "westock 已安装但未授权，行情将回退为本地缓存。"
+      info "授权方式：运行 'westock version' 或在本应用查询行情时，按返回的授权链接在浏览器扫码登录。"
+    elif echo "$PROBE" | grep -q '|'; then
+      ok "westock 已授权，行情可实时获取（行情探测成功）"
+    else
+      warn "未能确认 westock 授权状态（行情探测无有效返回），请自行运行 'westock kline sh600519 --period day --limit 1' 验证；未授权时行情将回退为本地缓存。"
+    fi
   fi
 else
   err "未检测到 westock 命令（本应用获取 A股/ETF 实时行情所依赖的命令行工具）。"
