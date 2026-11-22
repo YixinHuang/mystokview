@@ -25,12 +25,13 @@ export default function AddHoldingDialog({ visible, onClose, onCreated }: Props)
 
   // 名称输入防抖搜索
   useEffect(() => {
+    // 清空关键词同样递增序号作废在途请求，否则旧候选会在清空后重新弹出
+    const seq = ++searchSeqRef.current;
     if (!keyword.trim()) {
       setCandidates([]);
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    const seq = ++searchSeqRef.current;
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {

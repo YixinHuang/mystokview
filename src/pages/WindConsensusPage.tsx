@@ -69,10 +69,10 @@ function DetailList({ details }: { details: Array<Record<string, unknown>> }) {
       {details.map((d, i) => {
         const target = d["目标价"];
         const prevTarget = d["前次目标价"];
-        // 先确认可转数字再比较：任一为非数字时 Number() 为 NaN，NaN !== NaN 恒真会误标调整方向
+        // 先排除 null/undefined（Number(null) === 0 能通过 isFinite），再确认可转数字
         const tgtNum = Number(target);
         const prevNum = Number(prevTarget);
-        const chg = target !== undefined && prevTarget !== undefined && Number.isFinite(tgtNum) && Number.isFinite(prevNum) && prevNum !== tgtNum
+        const chg = target != null && prevTarget != null && Number.isFinite(tgtNum) && Number.isFinite(prevNum) && prevNum !== tgtNum
           ? `（前次 ${prevTarget}，${tgtNum < prevNum ? "下调" : "上调"}）`
           : "";
         return (

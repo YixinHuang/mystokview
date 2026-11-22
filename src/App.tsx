@@ -23,6 +23,13 @@ const { Aside, Content } = Layout;
 
 export default function App() {
   const [page, setPage] = useState<string>("holdings");
+  // 惰性挂载：页面首次切到时才渲染（此前 17 页常驻挂载，首屏会一次性并发触发全部 useEffect 请求）
+  const [visited, setVisited] = useState<Set<string>>(() => new Set(["holdings"]));
+
+  const openPage = (p: string) => {
+    setPage(p);
+    setVisited((v) => (v.has(p) ? v : new Set(v).add(p)));
+  };
 
   return (
     <Layout style={{ height: "100vh" }}>
@@ -35,7 +42,7 @@ export default function App() {
         </div>
         <Menu
           value={page}
-          onChange={(v) => setPage(String(v))}
+          onChange={(v) => openPage(String(v))}
           style={{ background: "transparent" }}
         >
           <Menu.MenuItem value="holdings" icon={<WalletIcon />}>
@@ -93,57 +100,91 @@ export default function App() {
       </Aside>
       <Layout>
         <Content style={{ padding: 20, overflow: "auto", background: "var(--td-bg-color-page)" }}>
-          <div style={{ display: page === "holdings" ? "block" : "none" }}>
-            <HoldingsPage />
-          </div>
-          <div style={{ display: page === "news" ? "block" : "none" }}>
-            <NewsPage />
-          </div>
-          <div style={{ display: page === "windnews" ? "block" : "none" }}>
-            <WindNewsPage />
-          </div>
-          <div style={{ display: page === "tech" ? "block" : "none" }}>
-            <TechnicalPage />
-          </div>
-          <div style={{ display: page === "consensus" ? "block" : "none" }}>
-            <ConsensusPage />
-          </div>
-          <div style={{ display: page === "windconsensus" ? "block" : "none" }}>
-            <WindConsensusPage />
-          </div>
-          <div style={{ display: page === "windvaluation" ? "block" : "none" }}>
-            <WindValuationPage />
-          </div>
-          <div style={{ display: page === "windupdates" ? "block" : "none" }}>
-            <WindUpdatesPage />
-          </div>
-          <div style={{ display: page === "windprofile" ? "block" : "none" }}>
-            <WindProfilePage />
-          </div>
-          <div style={{ display: page === "windtechnical" ? "block" : "none" }}>
-            <WindTechnicalPage />
-          </div>
-          <div style={{ display: page === "windrisk" ? "block" : "none" }}>
-            <WindRiskPage />
-          </div>
-          <div style={{ display: page === "windevents" ? "block" : "none" }}>
-            <WindEventsPage />
-          </div>
-          <div style={{ display: page === "reports" ? "block" : "none" }}>
-            <ReportsPage />
-          </div>
-          <div style={{ display: page === "fundflow" ? "block" : "none" }}>
-            <FundFlowPage />
-          </div>
-          <div style={{ display: page === "windmoneyflow" ? "block" : "none" }}>
-            <WindMoneyFlowPage />
-          </div>
-          <div style={{ display: page === "blocktrade" ? "block" : "none" }}>
-            <BlockTradePage />
-          </div>
-          <div style={{ display: page === "chat" ? "block" : "none", height: "100%" }}>
-            <ChatPage />
-          </div>
+          {visited.has("holdings") && (
+            <div style={{ display: page === "holdings" ? "block" : "none" }}>
+              <HoldingsPage />
+            </div>
+          )}
+          {visited.has("news") && (
+            <div style={{ display: page === "news" ? "block" : "none" }}>
+              <NewsPage />
+            </div>
+          )}
+          {visited.has("windnews") && (
+            <div style={{ display: page === "windnews" ? "block" : "none" }}>
+              <WindNewsPage />
+            </div>
+          )}
+          {visited.has("tech") && (
+            <div style={{ display: page === "tech" ? "block" : "none" }}>
+              <TechnicalPage />
+            </div>
+          )}
+          {visited.has("consensus") && (
+            <div style={{ display: page === "consensus" ? "block" : "none" }}>
+              <ConsensusPage />
+            </div>
+          )}
+          {visited.has("windconsensus") && (
+            <div style={{ display: page === "windconsensus" ? "block" : "none" }}>
+              <WindConsensusPage />
+            </div>
+          )}
+          {visited.has("windvaluation") && (
+            <div style={{ display: page === "windvaluation" ? "block" : "none" }}>
+              <WindValuationPage />
+            </div>
+          )}
+          {visited.has("windupdates") && (
+            <div style={{ display: page === "windupdates" ? "block" : "none" }}>
+              <WindUpdatesPage />
+            </div>
+          )}
+          {visited.has("windprofile") && (
+            <div style={{ display: page === "windprofile" ? "block" : "none" }}>
+              <WindProfilePage />
+            </div>
+          )}
+          {visited.has("windtechnical") && (
+            <div style={{ display: page === "windtechnical" ? "block" : "none" }}>
+              <WindTechnicalPage />
+            </div>
+          )}
+          {visited.has("windrisk") && (
+            <div style={{ display: page === "windrisk" ? "block" : "none" }}>
+              <WindRiskPage />
+            </div>
+          )}
+          {visited.has("windevents") && (
+            <div style={{ display: page === "windevents" ? "block" : "none" }}>
+              <WindEventsPage />
+            </div>
+          )}
+          {visited.has("reports") && (
+            <div style={{ display: page === "reports" ? "block" : "none" }}>
+              <ReportsPage />
+            </div>
+          )}
+          {visited.has("fundflow") && (
+            <div style={{ display: page === "fundflow" ? "block" : "none" }}>
+              <FundFlowPage />
+            </div>
+          )}
+          {visited.has("windmoneyflow") && (
+            <div style={{ display: page === "windmoneyflow" ? "block" : "none" }}>
+              <WindMoneyFlowPage />
+            </div>
+          )}
+          {visited.has("blocktrade") && (
+            <div style={{ display: page === "blocktrade" ? "block" : "none" }}>
+              <BlockTradePage />
+            </div>
+          )}
+          {visited.has("chat") && (
+            <div style={{ display: page === "chat" ? "block" : "none", height: "100%" }}>
+              <ChatPage />
+            </div>
+          )}
         </Content>
       </Layout>
     </Layout>
