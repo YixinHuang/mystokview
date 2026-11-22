@@ -1508,9 +1508,11 @@ app.post("/api/chat", async (req, res) => {
       "X-Accel-Buffering": "no",
     });
     const send = (data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-    // 客户端断开即中断生成循环（CodeBuddy 最多 15 轮工具调用，不为已断开的连接继续跑）
+    // 客户端断开即中断生成循环（CodeBuddy 最多 15 轮工具调用，不为已断开的连接继续跑）。
+    // 注意不能用 req.on("close")——现代 Node 里它在请求体读完时即触发（并非连接断开），
+    // 会把 clientGone 立即置真导致 SSE 一个事件都发不出；res 的 close 配合 writableEnded 才是断开判定
     let clientGone = false;
-    req.on("close", () => { clientGone = true; });
+    res.on("close", () => { if (!res.writableEnded) clientGone = true; });
     res.on("error", () => { clientGone = true; });
 
     const history = chatRepo.history(sid);
