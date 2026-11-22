@@ -66,7 +66,7 @@ fi
 # ---------- 2. 复制应用文件 ----------
 # 数组展开（"${EXCLUDES[@]}"）才能正确剥离 '*.log' 的引号且无 glob 风险；
 # 旧写法 $EXCLUDES 无引号展开时 rsync/tar 收到的是带引号的 '*.log'，永不匹配
-EXCLUDES=(--exclude=node_modules --exclude=dist --exclude=data --exclude=data.tar
+EXCLUDES=(--exclude=node_modules --exclude=dist --exclude=data --exclude='*.tar'
   --exclude=.env --exclude='*.log' --exclude=.git
   --exclude=.workbuddy --exclude=.codebuddy)
 log "复制应用到 $INSTALL_DIR"

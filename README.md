@@ -189,7 +189,7 @@ bash scripts/make-release.sh
 tar -xzf mystokview-0.1.0.tar.gz
 cd mystokview-0.1.0
 sudo bash install.sh            # Linux：自动装 Node>=18、npm install、构建、注册 systemd 服务并启动
-# macOS 可直接 bash install.sh（nohup 后台启动，未注册系统服务）
+# macOS 需 sudo bash install.sh（默认 /opt 需 root；免 sudo 可 INSTALL_DIR=~/mystokview bash install.sh，nohup 后台启动，未注册系统服务）
 ```
 
 `install.sh` 支持环境变量覆盖：`INSTALL_DIR`（默认 `/opt/mystokview`）、`PORT`（默认 `3001`）、`APP_USER`（默认 `mystokview`）。

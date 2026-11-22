@@ -18,7 +18,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
 # 经 tar 管道复制到暂存目录（与打包容同一套排除规则，规避 rsync 依赖）
-tar --exclude=node_modules --exclude=dist --exclude=data --exclude=data.tar \
+tar --exclude=node_modules --exclude=dist --exclude=data --exclude='*.tar' \
     --exclude=.env --exclude='*.log' --exclude=.git \
     --exclude=release --exclude='.DS_Store' \
     --exclude=.workbuddy --exclude=.codebuddy \

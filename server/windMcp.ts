@@ -166,18 +166,20 @@ function parseWindDocs(parsed: any): WindDoc[] {
   return items.map(toWindDoc).filter((d: WindDoc) => d.title);
 }
 
-async function callDocs(client: WindMCPClient, tool: string, query: string, topK: number): Promise<WindDoc[]> {
+async function callDocs(client: WindMCPClient, tool: string, query: string, topK: number): Promise<{ docs: WindDoc[]; error: string | null }> {
   try {
-    return parseWindDocs(await client.callTool(tool, { query, top_k: topK }));
+    return { docs: parseWindDocs(await client.callTool(tool, { query, top_k: topK })), error: null };
   } catch (e: any) {
     console.warn(`[wind] ${tool}(${query}) 失败:`, e?.message ?? e);
-    return [];
+    // 错误随结果透传（认证失败/积分不足/限频），不再吞成空数组导致「真无数据」不可区分
+    return { docs: [], error: String(e?.message ?? e) };
   }
 }
 
 export interface WindHoldingResult {
   news: WindDoc[];
   announcements: WindDoc[];
+  error: string | null; // 两工具均失败时为首个错误（如 401/积分不足），成功为 null
 }
 
 /** 逐持仓并发查万得财经新闻与官方公告（单持仓内两工具串行，持仓间并发） */
@@ -194,9 +196,9 @@ export async function fetchWindNews(
     const batch = holdings.slice(i, i + concurrency);
     await Promise.all(
       batch.map(async (h) => {
-        const news = await callDocs(client, "get_financial_news", h.name, newsTopK);
-        const announcements = await callDocs(client, "get_company_announcements", h.name, annTopK);
-        result.set(h.code, { news, announcements });
+        const newsRes = await callDocs(client, "get_financial_news", h.name, newsTopK);
+        const annRes = await callDocs(client, "get_company_announcements", h.name, annTopK);
+        result.set(h.code, { news: newsRes.docs, announcements: annRes.docs, error: newsRes.error ?? annRes.error });
       })
     );
   }

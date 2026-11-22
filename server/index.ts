@@ -690,7 +690,7 @@ app.get("/api/wind-news", async (req, res) => {
         return res.json({
           items: rows.map((r) => {
             const p = snaps.get(r.code);
-            return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [] };
+            return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [], error: p?.error ?? null };
           }),
           date: latest,
           fromDb: dates.length > 0,
@@ -706,6 +706,7 @@ app.get("/api/wind-news", async (req, res) => {
       const fresh = entries.get(target.code);
       const freshNews = fresh?.news ?? [];
       const freshAnn = fresh?.announcements ?? [];
+      const freshErr = fresh?.error ?? null;
 
       // 无当日数据：不落库，返回最近日期快照视图（fromDb/isHistorical 按实际标注，前端据此显示历史提示）
       if (freshNews.length === 0 && freshAnn.length === 0) {
@@ -715,7 +716,7 @@ app.get("/api/wind-news", async (req, res) => {
         return res.json({
           items: rows.map((r) => {
             const p = snaps.get(r.code);
-            return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [] };
+            return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [], error: p?.error ?? null };
           }),
           date: latest,
           fromDb: dates.length > 0,
@@ -724,7 +725,7 @@ app.get("/api/wind-news", async (req, res) => {
           availableDates: dates,
           configMissing: false,
           refreshed: { code: target.code, noData: true },
-          error: null,
+          error: freshErr,
         });
       }
 
@@ -759,7 +760,7 @@ app.get("/api/wind-news", async (req, res) => {
         return res.json({
           items: rows.map((r) => {
             const p = snaps.get(r.code);
-            return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [] };
+            return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [], error: p?.error ?? null };
           }),
           date: latest,
           fromDb: true,
@@ -797,9 +798,9 @@ app.get("/api/wind-news", async (req, res) => {
           const snapshots = rows
             .map((r) => {
               const e = entries.get(r.code);
-              return { code: r.code, date: today, payload: { news: e?.news ?? [], announcements: e?.announcements ?? [] } };
-            })
-            .filter((s) => s.payload.news.length > 0 || s.payload.announcements.length > 0);
+          return { code: r.code, date: today, payload: { news: e?.news ?? [], announcements: e?.announcements ?? [], error: e?.error ?? "" } };
+        })
+        .filter((s) => s.payload.news.length > 0 || s.payload.announcements.length > 0 || s.payload.error);
           if (snapshots.length > 0) windNewsSnapshotRepo.upsertMany(snapshots);
         } catch (e: any) {
           topError = String(e?.message ?? e);
@@ -1504,6 +1505,10 @@ app.post("/api/chat", async (req, res) => {
       "X-Accel-Buffering": "no",
     });
     const send = (data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+    // 客户端断开即中断生成循环（CodeBuddy 最多 15 轮工具调用，不为已断开的连接继续跑）
+    let clientGone = false;
+    req.on("close", () => { clientGone = true; });
+    res.on("error", () => { clientGone = true; });
 
     const history = chatRepo.history(sid);
     chatRepo.add(sid, "user", message);
@@ -1512,6 +1517,7 @@ app.post("/api/chat", async (req, res) => {
   const toolNames: string[] = [];
   try {
     for await (const ev of runHousekeeperTurn(message, history)) {
+      if (clientGone) break;
       if (ev.type === "text" && ev.text) assistantText += ev.text + "\n";
       if (ev.type === "tool" && ev.toolName) toolNames.push(ev.toolName);
       send(ev);

@@ -219,6 +219,7 @@ export interface WindNewsEntry {
   name: string;
   news: WindDoc[];
   announcements: WindDoc[];
+  error?: string | null; // 该持仓的抓取错误（401/积分不足等），null/"" 表示正常
 }
 
 export interface WindNewsPayload {

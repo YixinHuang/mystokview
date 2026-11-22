@@ -123,6 +123,11 @@ export default function WindMoneyFlowPage() {
       if (j.error) MessagePlugin.warning(j.error);
       if (mounted.current && seq === seqRef.current) {
         setData(j);
+        if (force) {
+          // 强刷成功即回到当日视图，清空日期选择（否则副标题仍停留在历史快照提示）
+          dateRef.current = null;
+          setSelectedDate(null);
+        }
         if (!j.fromDb) {
           setLastRefresh(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
         }
