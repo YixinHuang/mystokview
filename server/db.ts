@@ -42,6 +42,126 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
+
+CREATE TABLE IF NOT EXISTS tech_snapshots (
+  code TEXT NOT NULL,                 -- westock 代码
+  date TEXT NOT NULL,                 -- 指标日期 YYYY-MM-DD（technical 返回的日期）
+  payload TEXT NOT NULL,              -- JSON: { tech, chip, summary }
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS news_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { news }
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS consensus_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { consensus, rating, score, summary }
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS reports_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { reports }
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS fund_flow_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { flow, summary }
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS block_margin_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { block, margin, summary }
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_news_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { news, announcements }（万得 MCP 文档）
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_consensus_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: WindConsensusData（万得 MCP 机构一致预期）
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_risk_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { tables }（万得 MCP 风险指标表）
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_events_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: { tables }（万得 MCP 公司事件表）
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_moneyflow_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: WindMoneyFlowData（万得 MCP 资金面数据）
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_valuation_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: stock_get_company_valuation 返回
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_updates_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: stock_get_company_updates 返回
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_technical_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: stock_get_technical_analysis 返回
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
+
+CREATE TABLE IF NOT EXISTS wind_profile_snapshots (
+  code TEXT NOT NULL,
+  date TEXT NOT NULL,                 -- 快照日期（抓取当日）
+  payload TEXT NOT NULL,              -- JSON: stock_get_company_profile 返回
+  created_at TEXT DEFAULT (datetime('now', 'localtime')),
+  PRIMARY KEY (code, date)
+);
 `);
 
 export interface HoldingRow {
@@ -157,3 +277,114 @@ export const chatRepo = {
     return rows.reverse();
   },
 };
+
+/** 按（代码, 日期）合并写 JSON 快照的通用仓库工厂，各功能一张表 */
+function makeSnapshotRepo(
+  table: string,
+  mergePayload?: (prev: any, next: any) => any
+) {
+  return {
+    upsertMany(items: Array<{ code: string; date: string; payload: unknown }>) {
+      const getStmt = db.prepare(`SELECT payload FROM ${table} WHERE code = ? AND date = ?`);
+      const stmt = db.prepare(`
+        INSERT INTO ${table} (code, date, payload) VALUES (@code, @date, @payload)
+        ON CONFLICT(code, date) DO UPDATE SET
+          payload = excluded.payload,
+          created_at = excluded.created_at
+      `);
+      const tx = db.transaction((rows: typeof items) => {
+        for (const r of rows) {
+          let payload = r.payload;
+          // 合并写：限流等导致的残缺抓取（null/空数组）保留旧快照对应字段，数据只增不减
+          const existing = getStmt.get(r.code, r.date) as { payload: string } | undefined;
+          if (existing) {
+            try {
+              const prev = JSON.parse(existing.payload);
+              if (prev && typeof prev === "object" && payload && typeof payload === "object") {
+                const merged: Record<string, unknown> = { ...prev, ...(payload as Record<string, unknown>) };
+                for (const k of Object.keys(merged)) {
+                  const v = (payload as Record<string, unknown>)[k];
+                  const old = (prev as Record<string, unknown>)[k];
+                  const empty = v === null || v === undefined || (Array.isArray(v) && v.length === 0);
+                  const oldFilled = old !== null && old !== undefined && !(Array.isArray(old) && old.length === 0);
+                  if (empty && oldFilled) merged[k] = old;
+                }
+                payload = mergePayload ? mergePayload(prev, merged) : merged;
+              }
+            } catch {
+              /* 旧 payload 损坏时直接覆盖 */
+            }
+          }
+          stmt.run({ code: r.code, date: r.date, payload: JSON.stringify(payload) });
+        }
+      });
+      tx(items);
+    },
+    /** 取某日期全部代码的快照，返回 code → payload 映射 */
+    getByDate(date: string): Map<string, any> {
+      const rows = db.prepare(`SELECT code, payload FROM ${table} WHERE date = ?`).all(date) as Array<{
+        code: string;
+        payload: string;
+      }>;
+      const map = new Map<string, any>();
+      for (const r of rows) {
+        try {
+          map.set(r.code, JSON.parse(r.payload));
+        } catch {
+          /* 跳过损坏行 */
+        }
+      }
+      return map;
+    },
+    /** 已有快照的日期列表（降序） */
+    listDates(): string[] {
+      const rows = db.prepare(`SELECT DISTINCT date FROM ${table} ORDER BY date DESC`).all() as Array<{
+        date: string;
+      }>;
+      return rows.map((r) => r.date);
+    },
+  };
+}
+
+// technical 按指标日期存，其余功能按抓取当日存
+export type SnapshotRepo = ReturnType<typeof makeSnapshotRepo>;
+
+export const techSnapshotRepo = makeSnapshotRepo("tech_snapshots");
+export const newsSnapshotRepo = makeSnapshotRepo("news_snapshots");
+export const consensusSnapshotRepo = makeSnapshotRepo("consensus_snapshots");
+export const reportsSnapshotRepo = makeSnapshotRepo("reports_snapshots");
+export const fundFlowSnapshotRepo = makeSnapshotRepo("fund_flow_snapshots");
+export const blockMarginSnapshotRepo = makeSnapshotRepo("block_margin_snapshots");
+export const windNewsSnapshotRepo = makeSnapshotRepo("wind_news_snapshots");
+export const windConsensusSnapshotRepo = makeSnapshotRepo("wind_consensus_snapshots");
+// tables 按分类合并：每次抓取补充/更新对应分类，缺失分类保留旧值（NL 工具返回有波动，避免互相覆盖）
+export const windRiskSnapshotRepo = makeSnapshotRepo("wind_risk_snapshots", (prev, next) => {
+  const prevTables = Array.isArray(prev.tables) ? prev.tables : [];
+  const nextTables = Array.isArray(next.tables) ? next.tables : [];
+  const merged = [...prevTables];
+  for (const t of nextTables) {
+    const idx = merged.findIndex((m) => m.category === t.category);
+    if (idx >= 0) merged[idx] = t;
+    else merged.push(t);
+  }
+  // 基于 next（通用合并结果）展开而非 prev，否则新增键（如 payload.error）会被丢弃
+  return { ...next, tables: merged };
+});
+// 事件表同样按分类合并累积
+export const windEventsSnapshotRepo = makeSnapshotRepo("wind_events_snapshots", (prev, next) => {
+  const prevTables = Array.isArray(prev.tables) ? prev.tables : [];
+  const nextTables = Array.isArray(next.tables) ? next.tables : [];
+  const merged = [...prevTables];
+  for (const t of nextTables) {
+    const idx = merged.findIndex((m) => m.category === t.category);
+    if (idx >= 0) merged[idx] = t;
+    else merged.push(t);
+  }
+  // 基于 next（通用合并结果）展开而非 prev，否则新增键（如 payload.error）会被丢弃
+  return { ...next, tables: merged };
+});
+export const windMoneyFlowSnapshotRepo = makeSnapshotRepo("wind_moneyflow_snapshots");
+export const windValuationSnapshotRepo = makeSnapshotRepo("wind_valuation_snapshots");
+export const windUpdatesSnapshotRepo = makeSnapshotRepo("wind_updates_snapshots");
+export const windTechnicalSnapshotRepo = makeSnapshotRepo("wind_technical_snapshots");
+export const windProfileSnapshotRepo = makeSnapshotRepo("wind_profile_snapshots");

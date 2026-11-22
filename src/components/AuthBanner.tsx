@@ -5,10 +5,13 @@ interface Props {
   authUrl: string | null;
   stale: boolean;
   onDone: () => void;
+  /** 覆盖默认文案（如新闻页传入资讯相关描述） */
+  title?: string;
+  description?: string;
 }
 
-/** 行情未授权时的扫码授权引导 */
-export default function AuthBanner({ authUrl, stale, onDone }: Props) {
+/** westock 未授权时的扫码授权引导 */
+export default function AuthBanner({ authUrl, stale, onDone, title, description }: Props) {
   const [checking, setChecking] = useState(false);
 
   const checkAuth = async () => {
@@ -29,7 +32,7 @@ export default function AuthBanner({ authUrl, stale, onDone }: Props) {
     }
   };
 
-  const description = stale
+  const defaultDescription = stale
     ? "westock 行情服务未授权，当前展示的是最近一次缓存的行情价格。完成授权后即可恢复实时行情。"
     : "westock 行情服务未授权，暂时无法获取实时行情。完成授权后自动恢复。";
 
@@ -37,10 +40,10 @@ export default function AuthBanner({ authUrl, stale, onDone }: Props) {
     <Alert
       theme="warning"
       style={{ marginBottom: 16 }}
-      title="行情服务需要授权"
+      title={title ?? "行情服务需要授权"}
       message={
         <div>
-          <div style={{ marginBottom: 8 }}>{description}</div>
+          <div style={{ marginBottom: 8 }}>{description ?? defaultDescription}</div>
           <Space>
             {authUrl && (
               <Button size="small" theme="primary" variant="outline" onClick={() => window.open(authUrl, "_blank")}>

@@ -1,7 +1,8 @@
 import { query } from "@tencent-ai/agent-sdk";
 import net from "node:net";
 
-const API_BASE = "http://localhost:3001";
+// 与 index.ts 的监听端口语义保持一致（PORT 可经 .env 覆盖），管家 curl 才能打对端口
+const API_BASE = `http://localhost:${Number(process.env.PORT || 3001)}`;
 
 /** 获取空闲端口：CodeBuddy CLI 默认监听 58145，会与 WorkBuddy 桌面端冲突，需动态指定 */
 function getFreePort(): Promise<number> {

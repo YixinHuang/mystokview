@@ -16,10 +16,16 @@ function EditableNumber({
   value,
   display,
   onSave,
+  positive,
+  min,
 }: {
   value: number;
   display: string;
   onSave: (v: number) => Promise<void>;
+  /** 要求输入大于 0（如持仓数量） */
+  positive?: boolean;
+  /** 允许的最小值（含边界，如成本价 >= 0） */
+  min?: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
@@ -49,8 +55,17 @@ function EditableNumber({
         onChange={(v) => setText(String(v))}
         onEnter={async () => {
           const n = Number(text);
-          if (Number.isNaN(n)) {
+          // Number("") === 0，空串必须先拦截，否则会静默存成 0
+          if (text.trim() === "" || Number.isNaN(n)) {
             MessagePlugin.error("请输入数字");
+            return;
+          }
+          if (positive && n <= 0) {
+            MessagePlugin.error("请输入大于 0 的数字");
+            return;
+          }
+          if (min !== undefined && n < min) {
+            MessagePlugin.error(`请输入不小于 ${min} 的数字`);
             return;
           }
           setSaving(true);
@@ -109,6 +124,7 @@ export default function HoldingsTable({ holdings, summary, onPatch, onRemove }: 
         <EditableNumber
           value={row.quantity}
           display={row.quantity.toLocaleString("zh-CN")}
+          positive
           onSave={async (v) => onPatch(row.code, { quantity: v })}
         />
       ),
@@ -145,6 +161,7 @@ export default function HoldingsTable({ holdings, summary, onPatch, onRemove }: 
             <EditableNumber
               value={row.cost_price}
               display={`成本价 ${fmtMoney(row.cost_price, 4)}`}
+              min={0}
               onSave={async (v) => onPatch(row.code, { cost_price: v })}
             />
           </div>

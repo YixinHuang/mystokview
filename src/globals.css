@@ -37,3 +37,34 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* 新闻列表标题（点击弹窗查看详情） */
+.news-title-link {
+  color: var(--td-brand-color);
+  font-weight: 500;
+  cursor: pointer;
+}
+.news-title-link:hover {
+  text-decoration: underline;
+}
+
+/* 新闻详情弹窗正文 */
+.news-detail-content p {
+  margin: 0 0 14px;
+  line-height: 1.85;
+  word-break: break-word;
+}
+.news-detail-content p:last-child {
+  margin-bottom: 0;
+}
+.news-detail-content strong {
+  font-weight: 600;
+}
+
+/* 研报详情弹窗正文（纯文本，保留换行与缩进） */
+.report-detail-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.85;
+}

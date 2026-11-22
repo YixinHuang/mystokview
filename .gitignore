@@ -5,6 +5,9 @@ dist/
 # 本地数据库（含个人持仓数据，勿提交）
 data/
 
+# 数据库手动备份包（同样含个人持仓数据）
+*.tar
+
 # 发行包产物
 release/
 
@@ -13,3 +16,12 @@ release/
 
 # 日志
 *.log
+
+# 系统杂项（任意层级）
+.DS_Store
+
+# AI 助手本地数据
+.workbuddy/
+
+# Wind MCP 参考资料（已移植进 server/windMcp.ts）
+wind-mcp-doc/
