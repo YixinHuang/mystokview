@@ -156,6 +156,9 @@ app.post("/api/holdings", async (req, res) => {
     if (!Number.isFinite(cost) || cost < 0) {
       return res.status(400).json({ error: "cost_price 必须为不小于 0 的数字" });
     }
+    if (open_date !== undefined && open_date !== null && String(open_date).trim() !== "" && !SNAP_DATE_RE.test(String(open_date).trim())) {
+      return res.status(400).json({ error: "open_date 格式须为 YYYY-MM-DD" });
+    }
     let code = String(rawCode ?? "").trim();
     let name = String(rawName ?? "").trim();
     if (!code && name) {
@@ -674,7 +677,7 @@ app.get("/api/wind-news", async (req, res) => {
           isHistorical: false,
           availableDates: windNewsSnapshotRepo.listDates(),
           configMissing: true,
-          refreshed: null,
+          refreshed: { code: target.code, noData: true },
           error: "未找到万得 API Key：请设置环境变量 WIND_API_KEY，或在 ~/.wind-aifinmarket/config 中配置",
         });
       }

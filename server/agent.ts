@@ -4,7 +4,9 @@ import net from "node:net";
 // 与 index.ts 的监听端口语义保持一致（PORT 可经 .env 覆盖），管家 curl 才能打对端口
 const API_BASE = `http://localhost:${Number(process.env.PORT || 3001)}`;
 
-/** 获取空闲端口：CodeBuddy CLI 默认监听 58145，会与 WorkBuddy 桌面端冲突，需动态指定 */
+/** 获取空闲端口：CodeBuddy CLI 默认监听 58145，会与 WorkBuddy 桌面端冲突，需动态指定。
+ * 注：探针 socket 关闭到 CLI 实际绑定之间存在 TOCTOU 竞态（端口被第三方抢占，低概率），
+ * 发生时 CLI 会因绑定失败而报错重试，属可接受范围 */
 function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
@@ -90,8 +92,8 @@ export async function* runHousekeeperTurn(
         const content = message.message?.content ?? [];
         for (const block of content) {
           if (block.type === "text" && block.text) {
-            // 过滤 CLI 原始英文认证报错，统一由下方中文引导替代
-            if (/authentication required/i.test(block.text)) continue;
+            // 过滤 CLI 原始英文认证报错（仅整块以该报错开头才丢弃，避免误伤恰好提及该短语的正常回复），统一由下方中文引导替代
+            if (/^authentication required/i.test(block.text.trim())) continue;
             yield { type: "text", text: block.text };
           } else if (block.type === "tool_use") {
             yield { type: "tool", toolName: String(block.name ?? "tool") };

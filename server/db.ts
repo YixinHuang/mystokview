@@ -267,11 +267,11 @@ export const quoteCacheRepo = {
   },
 };
 
-// 旧库迁移：chat_messages 补 tools 列（已存在时忽略）
+// 旧库迁移：chat_messages 补 tools 列；仅忽略「列已存在」，其余错误（如库锁）照常抛出
 try {
   db.exec("ALTER TABLE chat_messages ADD COLUMN tools TEXT DEFAULT NULL");
-} catch {
-  /* 列已存在 */
+} catch (e: any) {
+  if (!/duplicate column/i.test(String(e?.message ?? e))) throw e;
 }
 
 export const chatRepo = {

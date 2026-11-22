@@ -141,10 +141,11 @@ export class WindMCPClient {
   async callTool(name: string, args: Record<string, unknown>): Promise<any> {
     const result = await this.rpc("tools/call", { name, arguments: args });
     try {
-      return JSON.parse(result.content[0].text);
+      return JSON.parse(result?.content?.[0]?.text ?? "");
     } catch {
-      // 服务端返回纯文本错误（如积分不足、限流提示）时原文抛出，让调用方可见
-      const text = String(result.content?.[0]?.text ?? "").trim();
+      // 服务端返回纯文本错误（如积分不足、限流提示）时原文抛出，让调用方可见；
+      // result 为 null/结构异常时给出可读错误，避免 catch 内二次解引用 TypeError 掩盖原错误
+      const text = String(result?.content?.[0]?.text ?? "").trim();
       throw new Error(text ? `万得工具返回错误：${text.slice(0, 200)}` : "万得工具返回了无法解析的内容");
     }
   }

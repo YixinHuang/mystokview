@@ -87,7 +87,9 @@ function MoneyFlowRow({ entry }: { entry: WindMoneyFlowEntry }) {
         </div>
       ) : (
         <div style={{ fontSize: 13, color: "var(--td-text-color-secondary)" }}>
-          暂无 Wind 资金面数据（该次抓取失败，请刷新重试）
+          {entry.error
+            ? "暂无 Wind 资金面数据（该次抓取失败，请刷新重试）"
+            : "该标的当日暂无资金面数据"}
           {entry.error && <div style={{ color: "var(--td-error-color-6)", marginTop: 2 }}>{entry.error}</div>}
         </div>
       )}
