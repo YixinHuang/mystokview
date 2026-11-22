@@ -148,7 +148,7 @@ export default function WindNewsPage() {
         return;
       }
       if (j.refreshed?.noData) {
-        MessagePlugin.warning("未查询到该股票的当日数据");
+        MessagePlugin.warning(j.error ? `未查询到该股票的当日数据：${j.error}` : "未查询到该股票的当日数据");
       } else {
         MessagePlugin.success("已单独刷新该股票资讯");
       }

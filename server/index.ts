@@ -683,13 +683,20 @@ app.get("/api/wind-news", async (req, res) => {
       try {
         await client.listTools();
       } catch (e: any) {
+        // 返回最近日期快照视图而非空 items，否则前端 refreshOne 的 setData 会清空整个列表
+        const dates = windNewsSnapshotRepo.listDates();
+        const latest = dates[0] ?? null;
+        const snaps = latest ? windNewsSnapshotRepo.getByDate(latest) : new Map<string, any>();
         return res.json({
-          items: [],
-          date: null,
-          fromDb: false,
-          snapshotDate: null,
-          isHistorical: false,
-          availableDates: windNewsSnapshotRepo.listDates(),
+          items: rows.map((r) => {
+            const p = snaps.get(r.code);
+            return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [] };
+          }),
+          date: latest,
+          fromDb: dates.length > 0,
+          snapshotDate: latest,
+          isHistorical: dates.length > 0 && latest !== today,
+          availableDates: dates,
           configMissing: false,
           refreshed: { code: target.code, noData: true },
           error: `万得 MCP 连接失败：${e?.message ?? e}`,

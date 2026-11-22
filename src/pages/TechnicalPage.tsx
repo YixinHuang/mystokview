@@ -95,7 +95,8 @@ export default function TechnicalPage() {
       const url = d ? `/api/technical?date=${encodeURIComponent(d)}` : "/api/technical";
       const r = await fetch(url);
       const j = await r.json();
-      // westock 限频等非致命错误：警告但仍渲染部分数据（与其他页面一致），不再整体丢弃响应
+      if (!r.ok) throw new Error(j.error ?? "请求失败"); // 500 等错误必须拦下，否则 setData({error}) 会在渲染层崩溃
+      // westock 限频等非致命错误（HTTP 200 + error 字段）：警告但仍渲染部分数据（与其他页面一致）
       if (j.error) MessagePlugin.warning(j.error);
       if (mounted.current && seq === seqRef.current) {
         setData(j);
