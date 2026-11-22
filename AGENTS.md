@@ -1,6 +1,6 @@
 # AGENTS.md
 
-MyStokView（我的持仓）— A股/ETF 持仓管理 Web 应用：记录持仓、结合 westock 实时行情计算市值/浮动盈亏/权重，并内置可用自然语言查询和修改持仓的「持仓管家」AI 助手（`@tencent-ai/agent-sdk`）。
+MyStokView（我的股票）— A股/ETF 持仓管理 Web 应用：记录持仓、结合 westock 实时行情计算市值/浮动盈亏/权重，并内置可用自然语言查询和修改持仓的「持仓管家」AI 助手（`@tencent-ai/agent-sdk`）。
 
 ## 常用命令
 

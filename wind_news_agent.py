@@ -1,10 +1,10 @@
 """
-使用 GLM-5.3-Flash 的函数调用（Tool Call）能力，桥接"万得金融文档检索服务"MCP，
+使用 GLM-5.3 的函数调用（Tool Call）能力，桥接"万得金融文档检索服务"MCP，
 查询上市公司的财经新闻、市场评论。
 
 架构：
-    用户问题(公司名) ──> GLM-5.3-Flash ──(tool_calls)──> 本地 MCP 客户端
-                          ^                                   │
+    用户问题(公司名) ──> GLM-5.3 ──(tool_calls)──> 本地 MCP 客户端
+                          ^                             │
                           └──────(工具结果回传，模型总结)──────┘
 
 MCP 侧协议：JSON-RPC 2.0 over HTTP POST，响应为 SSE 流，鉴权 Bearer Token。
@@ -101,6 +101,8 @@ class WindMCPClient:
             raise RuntimeError(f"MCP 响应中未找到数据: {resp.text[:200]}")
         if "error" in payload:
             raise RuntimeError(f"MCP 错误: {payload['error']}")
+        if "result" not in payload or payload["result"] is None:
+            raise RuntimeError(f"MCP 响应缺少 result: {str(payload)[:200]}")
         return payload["result"]
 
     def list_tools(self) -> list:

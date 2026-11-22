@@ -5,7 +5,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PKG="release/mystokview-0.1.0.tar.gz"
+VERSION="$(node -p "require('./package.json').version" 2>/dev/null || echo "0.1.0")"
+PKG="release/mystokview-${VERSION}.tar.gz"
 IMG="jrei/systemd-ubuntu:24.04"   # 以 systemd 作为 PID1 的 Ubuntu 24.04
 CNAME="mystok-test"
 APP_PORT=3001
@@ -32,10 +33,10 @@ docker exec "$CNAME" bash -c "apt-get update >/dev/null 2>&1; apt-get install -y
 
 echo "== [4/6] 传入发布包并解压 =="
 docker cp "$PKG" "$CNAME":/root/
-docker exec "$CNAME" bash -c "cd /root && rm -rf mystokview-0.1.0 && tar -xzf $(basename "$PKG") && ls mystokview-0.1.0"
+docker exec "$CNAME" bash -c "cd /root && rm -rf mystokview-${VERSION} && tar -xzf $(basename "$PKG") && ls mystokview-${VERSION}"
 
 echo "== [5/6] 运行 install.sh（容器内以 root 执行）=="
-docker exec -w /root/mystokview-0.1.0 "$CNAME" bash install.sh
+docker exec -w "/root/mystokview-${VERSION}" "$CNAME" bash install.sh
 
 echo "== [6/6] 验证 =="
 echo "-- systemd 服务状态（应为 active）--"

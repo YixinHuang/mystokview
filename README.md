@@ -1,4 +1,4 @@
-# MyStokView · 我的持仓
+# MyStokView · 我的股票
 
 基于 [CodeBuddy Agent SDK](https://www.codebuddy.ai) 的**股票持仓管理 Web 应用**。用于记录 A 股 / ETF 持仓，结合实时行情计算市值、浮动盈亏、权重与已实现盈亏，并内置一个能用自然语言查询 / 修改持仓的「持仓管家」AI 助手。
 

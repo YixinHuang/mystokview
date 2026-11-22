@@ -17,11 +17,13 @@ mkdir -p "$OUT_DIR"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
-# 经 tar 管道复制到暂存目录（与打包容同一套排除规则，规避 rsync 依赖）
+# 经 tar 管道复制到暂存目录（与打包容同一套排除规则，规避 rsync 依赖）。
+# 注意：bsdtar 的 --exclude 按路径分量匹配（./ 前缀无法锚定顶层），data/dist/release/
+# wind-mcp-doc 为顶层专有命名，勿在项目内新建嵌套同名目录，否则会被静默排除
 tar --exclude=node_modules --exclude=dist --exclude=data --exclude='*.tar' \
     --exclude=.env --exclude='*.log' --exclude=.git \
     --exclude=release --exclude='.DS_Store' \
-    --exclude=.workbuddy --exclude=.codebuddy \
+    --exclude=.workbuddy --exclude=.codebuddy --exclude=wind-mcp-doc \
     -cf - . | tar -xf - -C "$STAGE"
 
 # 归档带顶层目录，与使用说明的 cd mystokview-<version> 一致

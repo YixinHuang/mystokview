@@ -22,6 +22,7 @@ release/
 
 # AI 助手本地数据
 .workbuddy/
+.codebuddy/
 
 # Wind MCP 参考资料（已移植进 server/windMcp.ts）
 wind-mcp-doc/
