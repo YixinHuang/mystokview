@@ -38,14 +38,18 @@ export function loadWindApiKey(): string {
   const env = (process.env.WIND_API_KEY ?? "").trim();
   if (env) return env;
   const config = path.join(os.homedir(), ".wind-aifinmarket", "config");
-  if (fs.existsSync(config)) {
-    for (const line of fs.readFileSync(config, "utf-8").split("\n")) {
-      const t = line.trim();
-      if (t.startsWith("WIND_API_KEY")) {
-        const v = t.split("=").slice(1).join("=").trim().replace(/^["']|["']$/g, "");
-        if (v && !v.startsWith("#")) return v;
+  try {
+    if (fs.existsSync(config)) {
+      for (const line of fs.readFileSync(config, "utf-8").split("\n")) {
+        const t = line.trim();
+        if (t.startsWith("WIND_API_KEY")) {
+          const v = t.split("=").slice(1).join("=").trim().replace(/^["']|["']$/g, "");
+          if (v && !v.startsWith("#")) return v;
+        }
       }
     }
+  } catch {
+    /* 配置文件读取失败（权限/竞态删除）按未配置处理，避免 fs 异常沿调用链被误标为 configMissing */
   }
   return "";
 }
@@ -108,7 +112,11 @@ export class WindMCPClient {
           .map((line) => line.slice(5).trim());
         if (dataLines.length === 0) continue;
         try {
-          payload = JSON.parse(dataLines.join("\n"));
+          const parsed = JSON.parse(dataLines.join("\n"));
+          // 只认响应事件（带 id 或含 result/error），跳过通知/日志类事件，避免 payload 停在通知对象上导致误导报错
+          if (parsed && typeof parsed === "object" && ("result" in parsed || "error" in parsed || parsed.id !== undefined)) {
+            payload = parsed;
+          }
         } catch {
           continue; // 跳过无法解析的事件（如注释、心跳）
         }
@@ -126,7 +134,7 @@ export class WindMCPClient {
   }
 
   async listTools(): Promise<Array<{ name: string; description?: string }>> {
-    return (await this.rpc("tools/list", {})).tools;
+    return (await this.rpc("tools/list", {}))?.tools ?? [];
   }
 
   /** 调用服务端工具，把 content[0].text 里的 JSON 字符串解析成 dict。 */

@@ -64,17 +64,17 @@ else
 fi
 
 # ---------- 2. 复制应用文件 ----------
-EXCLUDES="--exclude=node_modules --exclude=dist --exclude=data \
-  --exclude=.env --exclude='*.log' --exclude=.git \
-  --exclude=.workbuddy --exclude=.codebuddy"
+# 数组展开（"${EXCLUDES[@]}"）才能正确剥离 '*.log' 的引号且无 glob 风险；
+# 旧写法 $EXCLUDES 无引号展开时 rsync/tar 收到的是带引号的 '*.log'，永不匹配
+EXCLUDES=(--exclude=node_modules --exclude=dist --exclude=data --exclude=data.tar
+  --exclude=.env --exclude='*.log' --exclude=.git
+  --exclude=.workbuddy --exclude=.codebuddy)
 log "复制应用到 $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 if command -v rsync >/dev/null 2>&1; then
-  # shellcheck disable=SC2086
-  rsync -a $EXCLUDES "$SRC_DIR/" "$INSTALL_DIR/"
+  rsync -a "${EXCLUDES[@]}" "$SRC_DIR/" "$INSTALL_DIR/"
 else
-  # shellcheck disable=SC2086
-  ( cd "$SRC_DIR" && tar $EXCLUDES -cf - . ) \
+  ( cd "$SRC_DIR" && tar "${EXCLUDES[@]}" -cf - . ) \
     | ( mkdir -p "$INSTALL_DIR" && tar -xf - -C "$INSTALL_DIR" )
 fi
 

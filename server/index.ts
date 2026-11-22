@@ -127,7 +127,6 @@ async function buildHoldingsPayload() {
       authRequired: market.authRequired,
       authUrl: market.authUrl,
       error: market.error,
-      klineFallback: market.klineFallback ?? false,
     },
   };
 }
@@ -148,6 +147,15 @@ app.post("/api/holdings", async (req, res) => {
     if (quantity === undefined || cost_price === undefined) {
       return res.status(400).json({ error: "quantity 和 cost_price 必填" });
     }
+    // Number("abc") 为 NaN，直接入库会被 better-sqlite3 绑定 NULL 触发 NOT NULL 约束错误
+    const qty = Number(quantity);
+    const cost = Number(cost_price);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ error: "quantity 必须为大于 0 的数字" });
+    }
+    if (!Number.isFinite(cost) || cost < 0) {
+      return res.status(400).json({ error: "cost_price 必须为不小于 0 的数字" });
+    }
     let code = String(rawCode ?? "").trim();
     let name = String(rawName ?? "").trim();
     if (!code && name) {
@@ -166,8 +174,8 @@ app.post("/api/holdings", async (req, res) => {
     }
     const row = holdingRepo.create({
       code, name,
-      quantity: Number(quantity),
-      cost_price: Number(cost_price),
+      quantity: qty,
+      cost_price: cost,
       open_date: open_date ? String(open_date) : undefined,
     });
     res.status(201).json(row);
@@ -177,15 +185,31 @@ app.post("/api/holdings", async (req, res) => {
 });
 
 app.patch("/api/holdings/:code", (req, res) => {
-  const { quantity, cost_price, realized_pnl } = req.body ?? {};
-  const before = holdingRepo.getByCode(req.params.code);
-  if (!before) return res.status(404).json({ error: "持仓不存在" });
-  const patch: Record<string, number> = {};
-  if (quantity !== undefined) patch.quantity = Number(quantity);
-  if (cost_price !== undefined) patch.cost_price = Number(cost_price);
-  if (realized_pnl !== undefined) patch.realized_pnl = Number(realized_pnl);
-  const after = holdingRepo.update(req.params.code, patch);
-  res.json({ before, after });
+  try {
+    const { quantity, cost_price, realized_pnl } = req.body ?? {};
+    const before = holdingRepo.getByCode(req.params.code);
+    if (!before) return res.status(404).json({ error: "持仓不存在" });
+    const patch: Record<string, number> = {};
+    if (quantity !== undefined) {
+      const n = Number(quantity);
+      if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: "quantity 必须为大于 0 的数字" });
+      patch.quantity = n;
+    }
+    if (cost_price !== undefined) {
+      const n = Number(cost_price);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: "cost_price 必须为不小于 0 的数字" });
+      patch.cost_price = n;
+    }
+    if (realized_pnl !== undefined) {
+      const n = Number(realized_pnl);
+      if (!Number.isFinite(n)) return res.status(400).json({ error: "realized_pnl 必须为数字" });
+      patch.realized_pnl = n;
+    }
+    const after = holdingRepo.update(req.params.code, patch);
+    res.json({ before, after });
+  } catch (e: any) {
+    res.status(500).json({ error: String(e?.message ?? e) });
+  }
 });
 
 app.delete("/api/holdings/:code", (req, res) => {
@@ -207,7 +231,6 @@ app.get("/api/quotes", async (req, res) => {
       authRequired: market.authRequired,
       authUrl: market.authUrl,
       error: market.error,
-      klineFallback: market.klineFallback ?? false,
     });
   } catch (e: any) {
     res.status(500).json({ error: String(e?.message ?? e) });
@@ -648,6 +671,7 @@ app.get("/api/wind-news", async (req, res) => {
           date: null,
           fromDb: false,
           snapshotDate: null,
+          isHistorical: false,
           availableDates: windNewsSnapshotRepo.listDates(),
           configMissing: true,
           refreshed: null,
@@ -655,6 +679,22 @@ app.get("/api/wind-news", async (req, res) => {
         });
       }
       const client = new WindMCPClient(WIND_MCP_ENDPOINT, apiKey);
+      // 连接探测：与全刷路径一致，MCP 连不上时明确报错而非误报「无数据」
+      try {
+        await client.listTools();
+      } catch (e: any) {
+        return res.json({
+          items: [],
+          date: null,
+          fromDb: false,
+          snapshotDate: null,
+          isHistorical: false,
+          availableDates: windNewsSnapshotRepo.listDates(),
+          configMissing: false,
+          refreshed: { code: target.code, noData: true },
+          error: `万得 MCP 连接失败：${e?.message ?? e}`,
+        });
+      }
       const entries = await fetchWindNews(client, [{ code: target.code, name: target.name }]);
       const fresh = entries.get(target.code);
       const freshNews = fresh?.news ?? [];
@@ -681,20 +721,8 @@ app.get("/api/wind-news", async (req, res) => {
         });
       }
 
-      // 合并落库：当日已有记录的其他股票保持不变；无当日记录的其他股票从最近日期记录复制
-      const todaySnaps = windNewsSnapshotRepo.getByDate(today);
-      const latest = windNewsSnapshotRepo.listDates()[0];
-      const latestSnaps = latest ? windNewsSnapshotRepo.getByDate(latest) : new Map<string, any>();
-      const upserts: Array<{ code: string; date: string; payload: unknown }> = [
-        { code: target.code, date: today, payload: { news: freshNews, announcements: freshAnn } },
-      ];
-      for (const r of rows) {
-        if (r.code === target.code) continue;
-        if (todaySnaps.has(r.code)) continue;
-        const fromLatest = latestSnaps.get(r.code);
-        if (fromLatest) upserts.push({ code: r.code, date: today, payload: fromLatest });
-      }
-      windNewsSnapshotRepo.upsertMany(upserts);
+      // 合并落库：该股票写入刚抓取的数据，当日已有记录的其他股票保持不变，无当日记录的从最近日期补底
+      mergeSingleRefresh(windNewsSnapshotRepo, target.code, today, { news: freshNews, announcements: freshAnn });
 
       const snaps = windNewsSnapshotRepo.getByDate(today);
       return res.json({
@@ -702,9 +730,10 @@ app.get("/api/wind-news", async (req, res) => {
           const p = snaps.get(r.code);
           return { code: r.code, name: r.name, news: p?.news ?? [], announcements: p?.announcements ?? [] };
         }),
-        date: null,
-        fromDb: false,
+        date: today,
+        fromDb: true,
         snapshotDate: today,
+        isHistorical: false,
         availableDates: windNewsSnapshotRepo.listDates(),
         configMissing: false,
         refreshed: { code: target.code, noData: false },
@@ -1250,16 +1279,16 @@ app.get("/api/wind-moneyflow", async (req, res) => {
         const entries = await fetchWindMoneyFlow(
           targets.map((r) => ({ code: r.code, name: r.name }))
         );
+        // 负缓存：确认无数据（无错误）的持仓也落当日空标记行，下次页面加载不再反复补抓；
+        // per-holding 错误（限频等）不落库，下次加载仍会重试
         const snapshots = targets
           .map((r) => {
             const e = entries.get(r.code);
-            return { code: r.code, moneyflow: e?.moneyflow ?? null };
+            return { code: r.code, date: today, payload: { moneyflow: e?.moneyflow ?? null, error: e?.error ?? "" } };
           })
-          .filter((s) => s.moneyflow);
+          .filter((s) => s.payload.moneyflow || !s.payload.error);
         if (snapshots.length > 0) {
-          windMoneyFlowSnapshotRepo.upsertMany(
-            snapshots.map((s) => ({ code: s.code, date: today, payload: { moneyflow: s.moneyflow } }))
-          );
+          windMoneyFlowSnapshotRepo.upsertMany(snapshots);
         }
       } catch (e: any) {
         // fetchWindMoneyFlow 仅在 Key 缺失时抛出
@@ -1472,18 +1501,22 @@ app.post("/api/chat", async (req, res) => {
     const history = chatRepo.history(sid);
     chatRepo.add(sid, "user", message);
 
-    let assistantText = "";
-    try {
-      for await (const ev of runHousekeeperTurn(message, history)) {
-        if (ev.type === "text" && ev.text) assistantText += ev.text + "\n";
-        send(ev);
-        if (ev.type === "done" || ev.type === "error") break;
-      }
-    } catch (e: any) {
-      send({ type: "error", error: String(e?.message ?? e) });
+  let assistantText = "";
+  const toolNames: string[] = [];
+  try {
+    for await (const ev of runHousekeeperTurn(message, history)) {
+      if (ev.type === "text" && ev.text) assistantText += ev.text + "\n";
+      if (ev.type === "tool" && ev.toolName) toolNames.push(ev.toolName);
+      send(ev);
+      if (ev.type === "done" || ev.type === "error") break;
     }
-    if (assistantText.trim()) chatRepo.add(sid, "assistant", assistantText.trim());
-    res.end();
+  } catch (e: any) {
+    send({ type: "error", error: String(e?.message ?? e) });
+  }
+  if (assistantText.trim() || toolNames.length > 0) {
+    chatRepo.add(sid, "assistant", assistantText.trim(), toolNames);
+  }
+  res.end();
   } catch (e: any) {
     // SSE 响应头已发出时只能断流收尾；否则回 500
     if (res.headersSent) {

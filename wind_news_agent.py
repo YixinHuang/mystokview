@@ -41,7 +41,10 @@ def _load_wind_api_key() -> str:
         for line in config.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line.startswith("WIND_API_KEY"):
-                key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                parts = line.split("=", 1)
+                if len(parts) < 2:
+                    continue
+                key = parts[1].strip().strip('"').strip("'")
                 if key and not key.startswith("#"):
                     return key
     raise SystemExit("未找到万得 API Key，请设置环境变量 WIND_API_KEY")

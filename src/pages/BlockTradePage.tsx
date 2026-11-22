@@ -27,7 +27,7 @@ function BlockSection({ b }: { b: BlockTradeData }) {
       </div>
       {b.trades.map((t, i) => (
         <div key={i} style={{ fontSize: 12, color: "var(--td-text-color-secondary)", paddingLeft: 12 }}>
-          {t.date && `${t.date} · `}{t.type || "大宗交易"} · 成交价 {t.price} · {fmtAmount(t.value)} · 折溢价 {fmtPct(t.discount)}
+          {t.date && `${t.date} · `}{t.type || "大宗交易"} · 成交价 {t.price ?? "--"} · {fmtAmount(t.value)} · 折溢价 {fmtPct(t.discount)}
           {t.buyer && ` · 买方 ${t.buyer}`}
           {t.seller && ` / 卖方 ${t.seller}`}
         </div>

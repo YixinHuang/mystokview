@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 5173,
-      host: true, // 监听 0.0.0.0，允许通过公网 IP 访问（默认仅 localhost）
+      host: true, // 监听 0.0.0.0 允许局域网/公网访问；/api/* 无鉴权，公网暴露有数据与操作风险，仅在可信网络开启
       proxy: {
         "/api": {
           target: `http://localhost:${port}`,

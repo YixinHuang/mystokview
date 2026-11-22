@@ -8,7 +8,7 @@ export class RateLimiter {
     private readonly windowMs: number
   ) {}
 
-  /** 取一个调用名额；窗口已满时等待最早一次调用滑出窗口后再占用 */
+  /** 取一个调用名额；窗口已满时睡到最早一次调用滑出窗口再占用（精确等待，不忙轮询） */
   async acquire(): Promise<void> {
     for (;;) {
       const now = Date.now();
@@ -17,7 +17,8 @@ export class RateLimiter {
         this.stamps.push(now);
         return;
       }
-      await new Promise((r) => setTimeout(r, 25));
+      const waitMs = this.windowMs - (now - this.stamps[0]) + 5;
+      await new Promise((r) => setTimeout(r, waitMs));
     }
   }
 }

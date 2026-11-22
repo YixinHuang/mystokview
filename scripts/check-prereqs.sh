@@ -3,6 +3,8 @@
 # 检测 Node 版本、npm 依赖、westock 命令行工具的安装与授权状态、.env 配置。
 # 用法: bash scripts/check-prereqs.sh   或   npm run setup
 
+cd "$(dirname "$0")/.." || exit 1   # 相对路径假设：从任意目录运行都以项目根为基准
+
 cecho() { printf '\033[0;%sm%s\033[0m\n' "$1" "$2"; }
 ok()   { cecho "32" "✅ $1"; }
 warn() { cecho "33" "⚠️  $1"; }
@@ -18,11 +20,18 @@ if command -v node >/dev/null 2>&1; then
   NODE_VER=$(node -v | sed 's/v//')
   MAJOR=$(echo "$NODE_VER" | cut -d. -f1)
   info "Node.js: v$NODE_VER"
-  if [ -n "$MAJOR" ] && [ "$MAJOR" -lt 18 ] 2>/dev/null; then
-    err "Node.js 版本过低，需要 >= 18，请先升级。"
-  else
-    ok "Node.js 版本满足要求 (>= 18)"
-  fi
+  case "$MAJOR" in
+    ''|*[!0-9]*)
+      warn "无法解析 Node.js 版本号 v$NODE_VER，请人工确认 >= 18"
+      ;;
+    *)
+      if [ "$MAJOR" -lt 18 ]; then
+        err "Node.js 版本过低，需要 >= 18，请先升级。"
+      else
+        ok "Node.js 版本满足要求 (>= 18)"
+      fi
+      ;;
+  esac
 else
   err "未检测到 Node.js，请先安装 >= 18 的版本 (https://nodejs.org)。"
 fi

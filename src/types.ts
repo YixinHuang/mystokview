@@ -229,7 +229,7 @@ export interface WindNewsPayload {
   isHistorical: boolean;
   availableDates: string[];
   configMissing: boolean;
-  refreshed: { code: string; noData: boolean } | null;
+  refreshed?: { code: string; noData: boolean } | null;
   error: string | null;
 }
 
@@ -259,7 +259,7 @@ export interface WindConsensusPayload {
   isHistorical: boolean;
   availableDates: string[];
   configMissing: boolean;
-  refreshed: { code: string; noData: boolean } | null;
+  refreshed?: { code: string; noData: boolean } | null;
   error: string | null;
 }
 
@@ -284,7 +284,7 @@ export interface WindRiskPayload {
   isHistorical: boolean;
   availableDates: string[];
   configMissing: boolean;
-  refreshed: { code: string; noData: boolean } | null;
+  refreshed?: { code: string; noData: boolean } | null;
   error: string | null;
 }
 
@@ -309,7 +309,7 @@ export interface WindEventsPayload {
   isHistorical: boolean;
   availableDates: string[];
   configMissing: boolean;
-  refreshed: { code: string; noData: boolean } | null;
+  refreshed?: { code: string; noData: boolean } | null;
   error: string | null;
 }
 
@@ -328,7 +328,7 @@ export interface WindToolPayload {
   isHistorical: boolean;
   availableDates: string[];
   configMissing: boolean;
-  refreshed: { code: string; noData: boolean } | null;
+  refreshed?: { code: string; noData: boolean } | null;
   error: string | null;
 }
 
@@ -376,7 +376,7 @@ export interface NorthHoldingData {
   disclose_end: string;
   holding_cap: number;
   holding_ratio: number;
-  hold_shares: number;
+  hold_shares: number | null;
   cap_chg_q: number | null;
   cap_chg_y: number | null;
 }
@@ -385,7 +385,7 @@ export interface ShortData {
   date: string;
   close_price: number | null;
   short_shares: number;
-  short_amount: number;
+  short_amount: number | null;
   short_ratio: number | null;
 }
 
@@ -421,9 +421,9 @@ export interface FundFlowPayload {
 
 export interface BlockTrade {
   date: string;
-  price: number;
+  price: number | null;
   value: number;
-  discount: number;
+  discount: number | null;
   type: string;
   buyer: string;
   seller: string;

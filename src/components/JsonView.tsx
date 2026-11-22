@@ -17,6 +17,9 @@ function ObjArrayTable({ value }: { value: Array<Record<string, unknown>> }) {
   for (const item of value) {
     for (const k of Object.keys(item)) if (!keys.includes(k)) keys.push(k);
   }
+  // 行数熔断：超大对象数组（如十大流通股东）一次性渲染数千 DOM 会卡顿
+  const MAX_ROWS = 200;
+  const shown = value.slice(0, MAX_ROWS);
   return (
     <div style={{ overflowX: "auto", marginTop: 2 }}>
       <table style={{ fontSize: 12, borderCollapse: "collapse" }}>
@@ -30,7 +33,7 @@ function ObjArrayTable({ value }: { value: Array<Record<string, unknown>> }) {
           </tr>
         </thead>
         <tbody>
-          {value.map((item, ri) => (
+          {shown.map((item, ri) => (
             <tr key={ri}>
               {keys.map((k) => {
                 const v = item[k];
@@ -49,12 +52,28 @@ function ObjArrayTable({ value }: { value: Array<Record<string, unknown>> }) {
           ))}
         </tbody>
       </table>
+      {value.length > MAX_ROWS && (
+        <div style={{ fontSize: 12, color: SECONDARY, marginTop: 2 }}>
+          已省略 {value.length - MAX_ROWS} 行（超过 {MAX_ROWS} 行渲染上限）
+        </div>
+      )}
     </div>
   );
 }
 
 function JsonNode({ name, value, depth }: { name?: string; value: unknown; depth: number }) {
   const pad = { paddingLeft: depth * 12 };
+
+  // 深度熔断：超过 8 层的嵌套直接折叠为字符串，防极端嵌套拖垮渲染
+  if (depth > 8) {
+    const v = typeof value === "object" && value !== null ? JSON.stringify(value) : value;
+    return (
+      <div style={{ fontSize: 12, lineHeight: 1.8, ...pad }}>
+        {name && <span style={{ color: SECONDARY }}>{name}：</span>}
+        <ScalarText v={v} />
+      </div>
+    );
+  }
 
   // 标量
   if (!isFilled(value) || typeof value !== "object") {

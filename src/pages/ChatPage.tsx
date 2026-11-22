@@ -21,8 +21,14 @@ export default function ChatPage() {
   useEffect(() => {
     fetch(`/api/chat/history?sessionId=${SESSION_ID}`)
       .then((r) => r.json())
-      .then((rows: Array<{ role: string; content: string }>) =>
-        setMessages(rows.map((r) => ({ role: r.role as "user" | "assistant", content: r.content })))
+      .then((rows: Array<{ role: string; content: string; tools?: string[] }>) =>
+        setMessages(
+          rows.map((r) => ({
+            role: r.role as "user" | "assistant",
+            content: r.content,
+            tools: Array.isArray(r.tools) ? r.tools : undefined,
+          }))
+        )
       )
       .catch(() => {});
   }, []);
@@ -50,11 +56,19 @@ export default function ChatPage() {
     setInput("");
     setMessages((m) => [...m, { role: "user", content }, { role: "assistant", content: "", tools: [] }]);
     setStreaming(true);
+    const ctrl = new AbortController();
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    const armIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => ctrl.abort(), 180_000); // 180s 无新数据视为后端挂起
+    };
     try {
+      armIdle();
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: SESSION_ID, message: content }),
+        signal: ctrl.signal,
       });
       if (!resp.ok || !resp.body) throw new Error(`请求失败：${resp.status}`);
       const reader = resp.body.getReader();
@@ -62,6 +76,7 @@ export default function ChatPage() {
       let buf = "";
       for (;;) {
         const { done, value } = await reader.read();
+        armIdle();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
         const parts = buf.split("\n\n");
@@ -88,9 +103,15 @@ export default function ChatPage() {
         }
       }
     } catch (e: any) {
-      MessagePlugin.error(e.message ?? "发送失败");
-      patchLastAssistant((m) => ({ ...m, content: m.content || "（连接失败，请检查后端服务）" }));
+      if (ctrl.signal.aborted) {
+        MessagePlugin.error("响应超时，已中止本次对话");
+        patchLastAssistant((m) => ({ ...m, content: m.content || "（响应超时，请重试）" }));
+      } else {
+        MessagePlugin.error(e.message ?? "发送失败");
+        patchLastAssistant((m) => ({ ...m, content: m.content || "（连接失败，请检查后端服务）" }));
+      }
     } finally {
+      clearTimeout(idleTimer);
       setStreaming(false);
     }
   };

@@ -22,8 +22,6 @@ export interface MarketResult {
   authRequired: boolean;
   authUrl: string | null;
   error: string | null;
-  /** true 表示部分或全部行情由 kline（日 K 最新一根的 last）兜底取得 */
-  klineFallback?: boolean;
 }
 
 /** fetchKline 的返回：行情 + 授权状态 */
@@ -764,7 +762,14 @@ export async function fetchTechnical(codes: string[]): Promise<TechnicalResult> 
   try {
     const out = await runWestock(["chip", unique.join(",")], 25000);
     const authMatch = out.match(AUTH_RE);
-    if (authMatch) return { entries, authRequired: true, authUrl: authMatch[1], error: null };
+    if (authMatch) {
+      // chip 阶段未授权：保留已抓到的技术指标（chip 置空），不丢弃 techRows
+      for (const code of unique) {
+        const tech = techRows.get(code) ?? null;
+        entries.set(code, { tech, chip: null, summary: tech ? deriveTechSummary(tech, null) : null });
+      }
+      return { entries, authRequired: true, authUrl: authMatch[1], error: null };
+    }
     for (const row of parseMarkdownTable(out)) {
       const code = (row.code || row.symbol || "").trim();
       if (!code) continue;
@@ -1063,7 +1068,7 @@ export interface NorthHoldingData {
   disclose_end: string; // 披露截止日（季度末）
   holding_cap: number;  // 持股市值（元）
   holding_ratio: number; // 占流通比 %
-  hold_shares: number;  // 持股数（股）
+  hold_shares: number | null; // 持股数（股），缺失列为 null
   cap_chg_q: number | null; // 市值环比变动
   cap_chg_y: number | null; // 市值同比变动
 }
@@ -1073,7 +1078,7 @@ export interface ShortData {
   date: string;
   close_price: number | null;
   short_shares: number; // 卖空股数
-  short_amount: number; // 卖空金额（元）
+  short_amount: number | null; // 卖空金额（元），缺失列为 null
   short_ratio: number | null; // 卖空占比 %
 }
 
@@ -1351,7 +1356,7 @@ function collectNorthHolding(out: string, fallbackCode: string, map: Map<string,
       disclose_end: (row.discloseEnd ?? "").trim(),
       holding_cap: cap,
       holding_ratio: numOrNull(row.holdingRatio) ?? 0,
-      hold_shares: num(row.holdShares),
+      hold_shares: numOrNull(row.holdShares),
       cap_chg_q: numOrNull(row.capChgQ),
       cap_chg_y: numOrNull(row.capChgY),
     });
@@ -1369,7 +1374,7 @@ function collectShort(out: string, map: Map<string, ShortData>) {
       date: (row.date ?? "").trim(),
       close_price: numOrNull(row.ClosePrice),
       short_shares: shares,
-      short_amount: num(row.ShortAmount),
+      short_amount: numOrNull(row.ShortAmount),
       short_ratio: numOrNull(row.ShortRatio),
     });
   }
@@ -1397,9 +1402,9 @@ function collectSouthHolding(out: string, fallbackCode: string, map: Map<string,
 /** westock fund block 的单笔大宗交易 */
 export interface BlockTrade {
   date: string;
-  price: number;    // 成交价
+  price: number | null;    // 成交价，缺失列为 null
   value: number;    // 成交额（元）
-  discount: number; // 折溢价率（%，0 为平价）
+  discount: number | null; // 折溢价率（%，0 为平价），缺失列为 null
   type: string;     // 交易类型（协议交易等）
   buyer: string;    // 买方营业部
   seller: string;   // 卖方营业部
@@ -1451,9 +1456,9 @@ function parseBlockOutput(out: string, fallbackDate = ""): BlockTradeData | null
     .filter((r) => r.TurnoverValue !== undefined)
     .map((r) => ({
       date: (r.date ?? headerDate ?? "").trim(),
-      price: num(r.TurnoverPrice),
+      price: numOrNull(r.TurnoverPrice),
       value: num(r.TurnoverValue),
-      discount: num(r.CloseDiscountRate),
+      discount: numOrNull(r.CloseDiscountRate),
       type: (r.TradingType ?? "").trim(),
       buyer: (r.BuySalesDepartment ?? "").trim(),
       seller: (r.SellSalesDepartment ?? "").trim(),
@@ -1511,7 +1516,7 @@ function deriveBlockMarginSummary(block: BlockTradeData | null, margin: MarginDa
     );
     if (block.trades.length > 0) {
       const avgDiscount =
-        block.trades.reduce((s, t) => s + (Number.isFinite(t.discount) ? t.discount : 0), 0) /
+        block.trades.reduce((s, t) => s + (t.discount ?? 0), 0) /
         block.trades.length;
       signals.push(`成交折溢价率均值 ${round(avgDiscount, 2)}%${avgDiscount <= -3 ? "（大幅折价）" : avgDiscount > 0 ? "（溢价成交）" : "（平价成交）"}`);
       if (avgDiscount <= -3) pts -= 1;

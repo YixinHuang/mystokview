@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   session_id TEXT NOT NULL,
   role TEXT NOT NULL,                 -- user | assistant
   content TEXT NOT NULL,
+  tools TEXT,                         -- assistant 消息的工具调用名列表（JSON 数组），历史恢复用
   created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -266,15 +267,34 @@ export const quoteCacheRepo = {
   },
 };
 
+// 旧库迁移：chat_messages 补 tools 列（已存在时忽略）
+try {
+  db.exec("ALTER TABLE chat_messages ADD COLUMN tools TEXT DEFAULT NULL");
+} catch {
+  /* 列已存在 */
+}
+
 export const chatRepo = {
-  add(sessionId: string, role: "user" | "assistant", content: string) {
-    db.prepare("INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)").run(sessionId, role, content);
+  add(sessionId: string, role: "user" | "assistant", content: string, tools?: string[]) {
+    db.prepare("INSERT INTO chat_messages (session_id, role, content, tools) VALUES (?, ?, ?, ?)")
+      .run(sessionId, role, content, tools && tools.length > 0 ? JSON.stringify(tools) : null);
   },
-  history(sessionId: string, limit = 20): Array<{ role: string; content: string }> {
+  history(sessionId: string, limit = 20): Array<{ role: string; content: string; tools?: string[] }> {
     const rows = db.prepare(
-      "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY id DESC LIMIT ?"
-    ).all(sessionId, limit) as Array<{ role: string; content: string }>;
-    return rows.reverse();
+      "SELECT role, content, tools FROM chat_messages WHERE session_id = ? ORDER BY id DESC LIMIT ?"
+    ).all(sessionId, limit) as Array<{ role: string; content: string; tools: string | null }>;
+    return rows.reverse().map((r) => {
+      let tools: string[] | undefined;
+      if (r.tools) {
+        try {
+          const parsed = JSON.parse(r.tools);
+          if (Array.isArray(parsed)) tools = parsed;
+        } catch {
+          /* 历史数据损坏时忽略 tools */
+        }
+      }
+      return { role: r.role, content: r.content, tools };
+    });
   },
 };
 

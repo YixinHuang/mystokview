@@ -21,6 +21,7 @@ export default function AddHoldingDialog({ visible, onClose, onCreated }: Props)
   const [openDate, setOpenDate] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const searchSeqRef = useRef(0);
 
   // 名称输入防抖搜索
   useEffect(() => {
@@ -29,18 +30,23 @@ export default function AddHoldingDialog({ visible, onClose, onCreated }: Props)
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    const seq = ++searchSeqRef.current;
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
         const r = await fetch(`/api/search?q=${encodeURIComponent(keyword.trim())}`);
         const j = await r.json();
-        setCandidates(Array.isArray(j) ? j : []);
+        // 响应序号守卫：慢的旧请求不得覆盖新关键词的结果
+        if (seq === searchSeqRef.current) setCandidates(Array.isArray(j) ? j : []);
       } catch {
-        setCandidates([]);
+        if (seq === searchSeqRef.current) setCandidates([]);
       } finally {
-        setSearching(false);
+        if (seq === searchSeqRef.current) setSearching(false);
       }
     }, 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current); // 卸载时清理防抖定时器
+    };
   }, [keyword]);
 
   const reset = () => {

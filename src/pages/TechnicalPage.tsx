@@ -95,7 +95,8 @@ export default function TechnicalPage() {
       const url = d ? `/api/technical?date=${encodeURIComponent(d)}` : "/api/technical";
       const r = await fetch(url);
       const j = await r.json();
-      if (j.error) throw new Error(j.error);
+      // westock 限频等非致命错误：警告但仍渲染部分数据（与其他页面一致），不再整体丢弃响应
+      if (j.error) MessagePlugin.warning(j.error);
       if (mounted.current && seq === seqRef.current) {
         setData(j);
         if (!j.fromDb) {
