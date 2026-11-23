@@ -23,7 +23,12 @@ mkdir -p "$OUTPUT_DIR"
 DB_SRC="$APP_DIR/data/portfolio.db"
 SNAP_DIR=""
 EXTRA_EXCLUDE=()
-cleanup() { [ -n "$SNAP_DIR" ] && rm -rf "$SNAP_DIR"; } # set -e 中途失败也清理临时目录
+# set -e 中途失败也清理临时目录；EXIT trap 的返回值会覆盖脚本退出码，
+# 无快照时必须显式返回 0（[ -n "" ] 返回 1 会把成功路径的退出码改写成 1）
+cleanup() {
+  if [ -n "$SNAP_DIR" ]; then rm -rf "$SNAP_DIR"; fi
+  return 0
+}
 trap cleanup EXIT
 
 if command -v sqlite3 >/dev/null 2>&1 && [ -f "$DB_SRC" ]; then
