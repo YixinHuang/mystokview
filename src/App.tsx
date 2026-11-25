@@ -38,7 +38,7 @@ export default function App() {
         style={{ background: "var(--td-bg-color-container)", borderRight: "1px solid var(--td-component-stroke)" }}
       >
         <div style={{ padding: "18px 24px 10px", fontWeight: 600, fontSize: 16 }}>
-          我的股票
+          工作台
         </div>
         <Menu
           value={page}
@@ -46,7 +46,7 @@ export default function App() {
           style={{ background: "transparent" }}
         >
           <Menu.MenuItem value="holdings" icon={<WalletIcon />}>
-            我的持仓
+            列表展示
           </Menu.MenuItem>
           <Menu.MenuItem value="news" icon={<ArticleIcon />}>
             我的新闻
