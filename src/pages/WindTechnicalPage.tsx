@@ -56,15 +56,16 @@ function TechBlockTable({ block }: { block: Record<string, any> }) {
   const fields: string[] = block["字段"] ?? [];
   const rows5: any[][] = block["最近5日"] ?? [];
   if (fields.length === 0 || rows5.length === 0) return null;
+  // 最近5日为行式存储：row[j] 对应 字段[j]（row[0] 即日期），转置时列头取全部日期、值直接按字段下标取
   const headers = rows5.map((r) => String(r[0] ?? ""));
   const bodyRows = fields
     .slice(1)
     .filter((f) => f !== "技术特征")
-    .map((f, fi0) => {
+    .map((f) => {
       const fi = fields.indexOf(f);
       return {
         field: f,
-        values: rows5.map((r) => fmt(r[fi + 1])),
+        values: rows5.map((r) => fmt(r[fi])),
       };
     });
   const feat = fmtFeat(block["技术特征"]);
@@ -73,8 +74,8 @@ function TechBlockTable({ block }: { block: Record<string, any> }) {
       <table style={{ fontSize: 11, borderCollapse: "collapse", width: "100%" }}>
         <thead>
           <tr>
-            <th style={{ fontWeight: 500, color: SECONDARY, padding: "3px 8px 3px 0", textAlign: "left" }}>{headers[0] ?? ""}</th>
-            {headers.slice(1).map((d, i) => (
+            <th style={{ fontWeight: 500, color: SECONDARY, padding: "3px 8px 3px 0", textAlign: "left" }}>{fields[0] ?? ""}</th>
+            {headers.map((d, i) => (
               <th key={i} style={{ fontWeight: 500, color: SECONDARY, padding: "3px 8px", textAlign: "center" }}>{d}</th>
             ))}
           </tr>
