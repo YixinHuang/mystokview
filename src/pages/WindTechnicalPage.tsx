@@ -115,6 +115,8 @@ function TechView({ data }: { data: any }) {
     { label: "趋势分析", keys: ["价格表现", "均线系统", "MACD", "OBV"], parent: zj["趋势分析"] },
     { label: "动能指标", keys: ["RSI", "KDJ", "CCI"], parent: zj["动能指标"] },
     { label: "波动与通道", keys: ["BOLL", "ATR"], parent: zj["波动与通道"] },
+    // 乖离率/心理线由后端从 get_stock_technicals 补取后并入技术面数据顶层
+    { label: "乖离率与心理线", keys: ["乖离率与心理线"], parent: zj },
   ];
 
   return (
@@ -150,8 +152,8 @@ function TechView({ data }: { data: any }) {
   );
 }
 
-/** Wind 技术分析：万得 MCP stock_get_technical_analysis（趋势/动能/波动与通道/关键价位），
- * 专用紧凑布局保证单公司技术数据一屏呈现。 */
+/** Wind 技术分析：万得 MCP stock_get_technical_analysis（趋势/动能/波动与通道/关键价位）
+ * + get_stock_technicals 补充的乖离率与心理线，专用紧凑布局保证单公司技术数据一屏呈现。 */
 export default function WindTechnicalPage() {
   const config = useMemo<WindToolPageConfig>(
     () => ({

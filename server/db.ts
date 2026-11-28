@@ -406,5 +406,13 @@ export const windEventsSnapshotRepo = makeSnapshotRepo("wind_events_snapshots", 
 export const windMoneyFlowSnapshotRepo = makeSnapshotRepo("wind_moneyflow_snapshots");
 export const windValuationSnapshotRepo = makeSnapshotRepo("wind_valuation_snapshots");
 export const windUpdatesSnapshotRepo = makeSnapshotRepo("wind_updates_snapshots");
-export const windTechnicalSnapshotRepo = makeSnapshotRepo("wind_technical_snapshots");
+export const windTechnicalSnapshotRepo = makeSnapshotRepo("wind_technical_snapshots", (prev, next) => {
+  // 乖离率/心理线补充块来自另一次 NL 调用，残缺抓取（本次缺该块）保留当日旧值，数据只增不减
+  const oldBlock = prev?.data?.["技术面数据"]?.["乖离率与心理线"];
+  const zj = next?.data?.["技术面数据"];
+  if (oldBlock && zj && typeof zj === "object" && !zj["乖离率与心理线"]) {
+    zj["乖离率与心理线"] = oldBlock;
+  }
+  return next;
+});
 export const windProfileSnapshotRepo = makeSnapshotRepo("wind_profile_snapshots");

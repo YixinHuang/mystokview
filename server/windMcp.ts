@@ -539,3 +539,53 @@ export async function fetchWindToolData(
   }
   return result;
 }
+
+/** 乖离率与心理线补充块，与技术面分块同构（{ 字段, 最近5日 }），前端共用转置表渲染 */
+function biasPsyBlock(
+  table: { columns: string[]; rows: Array<Array<string | number | null>> },
+  date: string
+): Record<string, any> | null {
+  const metrics = ["5日BIAS乖离率", "36日BIAS乖离率", "12日PSY心理线"];
+  const row = table.rows[0];
+  // 列名按前缀匹配（parseNLTable 可能附加单位后缀），排除「.周期数/.周期」子列
+  const values = metrics.map((k) => {
+    const i = table.columns.findIndex((c) => c.startsWith(k) && !c.includes("."));
+    return i >= 0 ? row[i] : null;
+  });
+  if (values.every((v) => v === null)) return null;
+  return { 字段: ["日期", ...metrics], 最近5日: [[date, ...values]] };
+}
+
+/** 逐持仓并发查乖离率与心理线（vserver_stock_data 的 get_stock_technicals NL 工具，1 次/持仓）。
+ * stock_get_technical_analysis 不含这些指标，作为技术面补充块合并进快照；单持仓失败/无数据返回 null 不影响其余。 */
+export async function fetchWindBiasPsy(
+  holdings: Array<{ code: string; name: string }>,
+  date: string,
+  opts: { concurrency?: number } = {}
+): Promise<Map<string, Record<string, any> | null>> {
+  const apiKey = loadWindApiKey();
+  if (!apiKey) throw new Error("未找到万得 API Key：请设置环境变量 WIND_API_KEY，或在 ~/.wind-aifinmarket/config 中配置");
+  const client = new WindMCPClient(WIND_STOCK_DATA_ENDPOINT, apiKey);
+  const concurrency = opts.concurrency ?? 2;
+  const result = new Map<string, Record<string, any> | null>();
+  for (let i = 0; i < holdings.length; i += concurrency) {
+    const batch = holdings.slice(i, i + concurrency);
+    await Promise.all(
+      batch.map(async (h) => {
+        const windCode = toWindCode(h.code);
+        try {
+          const table = await callNLTable(
+            client,
+            "get_stock_technicals",
+            `查询${h.name}（${windCode}）的5日乖离率BIAS、36日乖离率和12周期心理线指标PSY`
+          );
+          result.set(h.code, table ? biasPsyBlock(table, date) : null);
+        } catch (e: any) {
+          console.warn(`[wind] technicals(${h.code}) 失败:`, e?.message ?? e);
+          result.set(h.code, null);
+        }
+      })
+    );
+  }
+  return result;
+}

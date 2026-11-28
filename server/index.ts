@@ -27,7 +27,8 @@ import {
   type HoldingRow,
 } from "./db.js";
 import { fetchQuotes, checkAuth, isWestockInstalled, searchCode, fetchNews, fetchNewsDetail, fetchTechnical, fetchConsensus, fetchReports, fetchReportDetail, fetchFundFlow, fetchBlockMargin, type Quote } from "./market.js";
-import { WindMCPClient, fetchWindNews, fetchWindConsensus, fetchWindRisk, fetchWindEvents, fetchWindMoneyFlow, fetchWindToolData, loadWindApiKey, WIND_MCP_ENDPOINT } from "./windMcp.js";
+import { WindMCPClient, fetchWindNews, fetchWindConsensus, fetchWindRisk, fetchWindEvents, fetchWindMoneyFlow, fetchWindToolData, fetchWindBiasPsy, loadWindApiKey, WIND_MCP_ENDPOINT } from "./windMcp.js";
+import type { WindToolHoldingResult } from "./windMcp.js";
 import { runHousekeeperTurn } from "./agent.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1346,7 +1347,32 @@ function mergeSingleRefresh(repo: SnapshotRepo, code: string, today: string, pay
   repo.upsertMany(upserts);
 }
 
-function windToolRoute(path: string, repo: SnapshotRepo, tool: string) {
+function windToolRoute(
+  path: string,
+  repo: SnapshotRepo,
+  tool: string,
+  opts?: {
+    /** 主体数据就绪后的逐持仓补充抓取（仅 wind-technical 传入），失败只记日志不影响主体数据 */
+    postFetch?: (
+      entries: Map<string, WindToolHoldingResult>,
+      holdings: Array<{ code: string; name: string }>,
+      date: string
+    ) => Promise<void>;
+  }
+) {
+  // 补充指标合并：postFetch 内部已按持仓兜底，这里仅防其外层抛错（如 Key 缺失）
+  async function runPostFetch(
+    entries: Map<string, WindToolHoldingResult>,
+    holdings: Array<{ code: string; name: string }>,
+    date: string
+  ) {
+    if (!opts?.postFetch) return;
+    try {
+      await opts.postFetch(entries, holdings, date);
+    } catch (e: any) {
+      console.warn(`[wind] ${path} 补充指标失败:`, e?.message ?? e);
+    }
+  }
   app.get(path, async (req, res) => {
     try {
       const rows = holdingRepo.list();
@@ -1382,6 +1408,7 @@ function windToolRoute(path: string, repo: SnapshotRepo, tool: string) {
         let configMissing = false;
         try {
           const entries = await fetchWindToolData([{ code: target.code, name: target.name }], tool);
+          await runPostFetch(entries, [{ code: target.code, name: target.name }], today);
           const e = entries.get(target.code);
           payload = e?.data != null ? { data: e.data, error: e.error ?? "" } : null;
           // 无数据时透传 per-holding 错误（积分不足/限频等），供前端具体提示
@@ -1444,6 +1471,7 @@ function windToolRoute(path: string, repo: SnapshotRepo, tool: string) {
           rows.map((r) => ({ code: r.code, name: r.name })),
           tool
         );
+        await runPostFetch(entries, rows.map((r) => ({ code: r.code, name: r.name })), today);
         // payload 附带 per-holding 错误（空串表示无错误，可覆盖旧错误）；抓取失败仅存错误不清数据（合并写保留旧 data）
         const snapshots = rows
           .map((r) => {
@@ -1483,7 +1511,16 @@ function windToolRoute(path: string, repo: SnapshotRepo, tool: string) {
 
 windToolRoute("/api/wind-valuation", windValuationSnapshotRepo, "stock_get_company_valuation");
 windToolRoute("/api/wind-updates", windUpdatesSnapshotRepo, "stock_get_company_updates");
-windToolRoute("/api/wind-technical", windTechnicalSnapshotRepo, "stock_get_technical_analysis");
+windToolRoute("/api/wind-technical", windTechnicalSnapshotRepo, "stock_get_technical_analysis", {
+  // stock_get_technical_analysis 不含乖离率/心理线，从 get_stock_technicals（NL 问句）逐持仓补取，并入技术面数据
+  async postFetch(entries, hs, date) {
+    const extras = await fetchWindBiasPsy(hs, date);
+    for (const [code, block] of extras) {
+      const zj = entries.get(code)?.data?.["技术面数据"];
+      if (block && zj && typeof zj === "object") zj["乖离率与心理线"] = block;
+    }
+  },
+});
 windToolRoute("/api/wind-profile", windProfileSnapshotRepo, "stock_get_company_profile");
 
 // ---------- 持仓管家对话（SSE） ----------
